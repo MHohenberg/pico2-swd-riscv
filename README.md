@@ -14,7 +14,7 @@ There was a some gaslighting, particularly when it misunderstood dap_read_mem32 
 
 Overall I would say it was a horrible experience, even though it took 10 hours to write close to 10000 lines of code, I don't consider this my project, and I have no sense of acomplishment or growth.
 
-In contrast, usint AI to read all the docs (which are thousands of pages) and write helpful scripts to decode the oscilloscope data, create packed C structs from docs and etc, was very nice, and I did feel good after. The moment I read the first register and then when I was able to read memory via SBA I felt amazing.
+In contrast, using AI to read all the docs (which are thousands of pages) and write helpful scripts to decode the oscilloscope data, create packed C structs from docs and etc, was very nice, and I did feel good after. The moment I read the first register and then when I was able to read memory via SBA I felt amazing.
 
 The main issue is `taste`, when I write code I feel if its good or bad, as I am writing it, I know if its wrong, but using claude code I get desensitized very quickly and I just can't tell, it "reads" OK, but I don't know how it feels. In this case it happened when the code grew about 4x, from 1k to 4k lines. And worse of all, my mental model of the code is completely gone, and with it my ownership.
 
