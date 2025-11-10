@@ -1,11 +1,6 @@
 # pico2-swd-riscv
 
-A stateful SWD protocol implementation for debugging RP2350 RISC-V cores (Hazard3) from any Raspberry Pi Pico.
-
-Version 1.0.0
-License: MIT
-Repository: https://github.com/jackdoe/pico2-swd-riscv
-
+A stateful SWD protocol implementation for debugging RP2350 RISC-V cores (Hazard3) from any Raspberry Pi Pico2.
 
 ## 0. VIBE CODE WARNING
 
