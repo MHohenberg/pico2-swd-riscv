@@ -1030,17 +1030,17 @@ This prevents expensive DMSTATUS polls when the state is known. State transition
     halt_request()             read_dmstatus()
          │                           │
          ▼                           ▼
-  ┌────────────┐            ┌──────────────┐
-  │   Halted   │            │   Running    │
-  └─────┬──────┘            └──────┬───────┘
-        │                          │
-        │         resume()         │
-        └──────────────────────────┘
-                    │
-                    ▼
-               ┌─────────┐
-               │ Unknown │  (state invalidated)
-               └─────────┘
+   ┌────────────┐             ┌──────────────┐
+   │   Halted   │             │   Running    │
+   └─────┬──────┘             └──────┬───────┘
+         │                           │
+         │         resume()          │
+         └───────────────────────────┘
+                      │
+                      ▼
+                 ┌─────────┐
+                 │ Unknown │  (state invalidated)
+                 └─────────┘
 ```
 
 #### 9.C.2 Register Caching
