@@ -6,7 +6,7 @@ Version 1.0.0
 License: MIT
 Repository: https://github.com/jackdoe/pico2-swd-riscv
 
-## I. ARCHITECTURAL OVERVIEW
+## 1. ARCHITECTURAL OVERVIEW
 
 This library implements a complete three-layer abstraction for Serial Wire Debug protocol communication with RP2350's RISC-V Debug Module, modeled after the Debug Access Port specification and informed by ARM Debug Interface Architecture Specification v5.2.
 
@@ -45,11 +45,11 @@ This library implements a complete three-layer abstraction for Serial Wire Debug
 
 The separation of concerns follows classical protocol stack design: each layer exposes a well-defined interface and maintains independent state, with lower layers unaware of higher-layer semantics.
 
-## II. RISC-V DEBUG ARCHITECTURE: A FORMAL MODEL
+## 2. RISC-V DEBUG ARCHITECTURE: A FORMAL MODEL
 
 Before examining the protocol implementation, we must establish the theoretical foundations of RISC-V external debugging. This section develops the debug architecture from first principles, following the RISC-V External Debug Support Specification v0.13.
 
-### II.A The Hart State Machine
+### 2.A The Hart State Machine
 
 A RISC-V hart (hardware thread) exists in one of three abstract states:
 
@@ -88,7 +88,7 @@ A RISC-V hart (hardware thread) exists in one of three abstract states:
 
 **State 3: RESUMING** - A transient state where the hart has received a resume request but has not yet returned to normal execution. This state exists to model the asynchronous nature of resume operations.
 
-### II.B The Debug Module: An Independent Controller
+### 2.B The Debug Module: An Independent Controller
 
 The Debug Module (DM) is a hardware block separate from the hart itself. It acts as a "shadow controller" that can:
 
@@ -128,7 +128,7 @@ The DM is itself controlled by an external debugger via a Debug Transport Module
     └─────────────┘   └──────────────┘
 ```
 
-### II.C Debug Mode: A Privileged Exception Context
+### 2.C Debug Mode: A Privileged Exception Context
 
 When a hart enters debug mode, it is not simply "stopped." Rather, it enters a special execution context analogous to an exception handler:
 
@@ -139,7 +139,7 @@ When a hart enters debug mode, it is not simply "stopped." Rather, it enters a s
 
 The debug exception vector contains a tight polling loop that repeatedly checks for commands from the Debug Module. This loop is architecturally invisible to the debugger—we simply observe the hart as "halted."
 
-### II.D Abstract Commands: The Debug Module API
+### 2.D Abstract Commands: The Debug Module API
 
 The Abstract Command mechanism provides a hardware-implemented function call interface. Each abstract command is a 32-bit word written to the COMMAND register that encodes:
 
@@ -167,7 +167,7 @@ regno: Register number (0x1000-0x101f for GPRs x0-x31)
 
 The Debug Module hardware interprets this command and performs the register access autonomously. From the debugger's perspective, this is a synchronous operation: write COMMAND, poll ABSTRACTCS.busy until clear, read result from DATA0.
 
-### II.E The Program Buffer: A Programmable Exception Handler
+### 2.E The Program Buffer: A Programmable Exception Handler
 
 The Program Buffer (PROGBUF) is a small instruction memory (2-16 entries) within the Debug Module. When abstract commands cannot accomplish a task (e.g., accessing debug-only CSRs), the debugger can:
 
@@ -178,7 +178,7 @@ The Program Buffer (PROGBUF) is a small instruction memory (2-16 entries) within
 
 This is not a "code injection" attack—the hart never leaves debug mode. It's analogous to a debugger writing instructions into a trap handler's stack frame.
 
-### II.F System Bus Access: A Parallel Execution Path
+### 2.F System Bus Access: A Parallel Execution Path
 
 SBA provides a second path to memory that bypasses the hart entirely:
 
@@ -206,7 +206,7 @@ The hart and SBA compete for memory bus bandwidth. The hart's view of memory may
 
 This is not a bug—it's a fundamental architectural trade-off. SBA provides speed and non-intrusiveness at the cost of coherency guarantees.
 
-### II.G The Debugging Contract
+### 2.G The Debugging Contract
 
 RISC-V debugging rests on several invariants:
 
@@ -224,14 +224,14 @@ Interrupts are masked while in debug mode. The debugger must explicitly re-enabl
 
 These invariants enable reproducible debugging: halting twice at the same PC should show identical state.
 
-## III. THE SERIAL WIRE DEBUG PROTOCOL
+## 3. THE SERIAL WIRE DEBUG PROTOCOL
 
 Serial Wire Debug (SWD) is a 2-wire replacement for JTAG's 5-wire interface, developed by ARM. The protocol operates over two signals:
 
 - **SWCLK**: Clock signal driven by the debugger (host)
 - **SWDIO**: Bidirectional data signal with turnaround phases
 
-### III.A Protocol Packet Structure
+### 3.A Protocol Packet Structure
 
 Each SWD transaction consists of three phases:
 
@@ -282,7 +282,7 @@ static uint8_t make_swd_request(bool APnDP, bool RnW, uint8_t addr) {
 }
 ```
 
-### III.B PIO-Based Physical Layer
+### 3.B PIO-Based Physical Layer
 
 Unlike software bit-banging (which suffers from timing jitter and CPU overhead), this implementation uses RP2040/RP2350's Programmable I/O (PIO) blocks for deterministic timing.
 
@@ -303,7 +303,7 @@ uint32_t clk_sys_khz = clock_get_hz(clk_sys) / 1000;
 uint32_t divider = (((clk_sys_khz + freq_khz - 1) / freq_khz) + 3) / 4;
 ```
 
-### III.C The Dormant State and Protocol Selection
+### 3.C The Dormant State and Protocol Selection
 
 ARM Debug Interface Architecture v6 introduces a **Dormant State** to enable coexistence of multiple debug protocols (JTAG and SWD) on the same pins. At power-up, RP2350's SW-DP enters the Dormant state, requiring explicit activation before SWD operations can proceed.
 
@@ -313,7 +313,7 @@ The dormant state solves a fundamental problem: JTAG uses 5 signals (TMS, TCK, T
 2. Is sufficiently long to avoid false positives (128 bits)
 3. Uniquely identifies the target protocol (JTAG vs SWD)
 
-#### III.C.1 The State Transition Model
+#### 3.C.1 The State Transition Model
 
 The SW-DP implements a finite state machine with three protocol modes:
 
@@ -346,7 +346,7 @@ Once activated, the debug port remains in the selected protocol mode until:
 - Power is cycled
 - The external reset (RUN) pin is asserted
 
-#### III.C.2 The Selection Alert Sequence
+#### 3.C.2 The Selection Alert Sequence
 
 Before sending a protocol-specific activation code, ARM requires transmission of a 128-bit **Selection Alert Sequence**. This sequence serves as a "wake-up call" that:
 
@@ -362,7 +362,7 @@ The Selection Alert Sequence is a fixed 128-bit pattern defined in the ADI v6 sp
 
 This constant was chosen for its Hamming distance properties—it is unlikely to occur in normal signal traffic or be generated by crosstalk, glitches, or other non-debug activity.
 
-#### III.C.3 Implementation: Robust Activation Strategy
+#### 3.C.3 Implementation: Robust Activation Strategy
 
 Our implementation (`swd_protocol.c:357-382`) uses a **defensive activation strategy** that ensures reliable connection regardless of the SW-DP's initial state:
 
@@ -421,7 +421,7 @@ Bits[7:0] = 0x1a = 0b00011010
 
 This specific bit pattern was chosen to be distinct from valid JTAG TMS sequences, ensuring protocol disambiguation.
 
-#### III.C.4 Why Not Use the RP2350 Datasheet Sequence?
+#### 3.C.4 Why Not Use the RP2350 Datasheet Sequence?
 
 The RP2350 datasheet (Section 3.5.1) describes a simpler connection sequence:
 
@@ -442,7 +442,7 @@ This sequence assumes the SW-DP is in Dormant mode at power-up. However, in real
 
 Our JTAG→Dormant→SWD sequence provides **universal robustness**: it works regardless of the SW-DP's initial state. The cost is negligible—approximately 100 extra clock cycles, taking ~100µs at 1 MHz SWCLK—while the benefit is reliable connection without manual power-cycling.
 
-#### III.C.5 Post-Activation Verification
+#### 3.C.5 Post-Activation Verification
 
 After activation, we immediately read DP_IDCODE (`swd_protocol.c:386-397`):
 
@@ -470,11 +470,11 @@ For RP2350, the IDCODE is `0x4c013477` (RP2350 Debug Port, ARM Designer code 0x2
 
 This defensive activation strategy, while not strictly necessary for fresh power-up scenarios, ensures our library works reliably across the full range of real-world debug connection scenarios—a critical property for a reusable debug library.
 
-## IV. DEBUG ACCESS PORT ARCHITECTURE
+## 4. DEBUG ACCESS PORT ARCHITECTURE
 
 The Debug Access Port (DAP) provides memory-mapped access to debug resources through two register banks:
 
-### IV.A Debug Port Registers
+### 4.A Debug Port Registers
 
 The Debug Port (DP) manages power domains and AP selection:
 
@@ -483,7 +483,7 @@ The Debug Port (DP) manages power domains and AP selection:
 - **DP_SELECT** (0x8): AP and register bank selection
 - **DP_RDBUFF** (0xC): Read buffer for pipelined AP reads
 
-### IV.B Access Port Registers
+### 4.B Access Port Registers
 
 Access Ports (AP) provide interfaces to debug resources. RP2350 implements multiple APs:
 
@@ -499,7 +499,7 @@ Each AP has standardized registers:
 - **AP_DRW** (0x0C): Data Read/Write Register
 - **AP_IDR** (0xFC): Identification Register
 
-### IV.C RP2350-Specific DP_SELECT Encoding
+### 4.C RP2350-Specific DP_SELECT Encoding
 
 Standard ARM DP_SELECT format uses bits[31:24] for APSEL and bits[7:4] for APBANKSEL. RP2350 implements a non-standard encoding (`dap.c:18-22`):
 
@@ -512,7 +512,7 @@ uint32_t make_dp_select_rp2350(uint8_t apsel, uint8_t bank, bool ctrlsel) {
 
 The magic constant 0xD in bits[11:8] is undocumented but required for correct AP selection.
 
-### IV.D Bank Selection Caching
+### 4.D Bank Selection Caching
 
 AP registers are accessed through a banking mechanism where DP_SELECT must be written before each AP access. To minimize SWD transactions, the library maintains a cache of the current bank selection (`dap.c:28-55`):
 
@@ -532,7 +532,7 @@ static swd_error_t select_ap_bank(swd_target_t *target, uint8_t apsel, uint8_t b
 
 This caching reduces transaction count by approximately 50% in typical debug sessions.
 
-## V. DEBUG DOMAIN POWER SEQUENCING
+## 5. DEBUG DOMAIN POWER SEQUENCING
 
 Before any debug operations can proceed, the Debug Power Domain (DPD) and System Power Domain (SPD) must be powered up. This is not a physical power operation but rather clock and reset domain enabling.
 
@@ -559,13 +559,13 @@ for (int i = 0; i < 10; i++) {
 
 Failure to complete this sequence results in all subsequent debug operations returning WAIT responses indefinitely.
 
-## VI. RP2350 DEBUG MODULE INITIALIZATION
+## 6. RP2350 DEBUG MODULE INITIALIZATION
 
 After DAP power-up, the RP2350-specific Debug Module must be initialized through an undocumented activation handshake. This sequence was reverse-engineered from OpenOCD's RP2350 support with an oscilloscope and patience.
 
 The activation sequence (`rp2350.c:106-194`) consists of:
 
-### VI.A AP Selection and CSW Configuration
+### 6.A AP Selection and CSW Configuration
 
 ```c
 uint32_t sel_bank0 = make_dp_select_rp2350(AP_RISCV, 0, true);
@@ -575,7 +575,7 @@ uint32_t csw = 0xA2000002;  // 32-bit access, auto-increment disabled
 dap_write_ap(target, AP_RISCV, AP_CSW, csw);
 ```
 
-### VI.B Bank 1 Activation Handshake
+### 6.B Bank 1 Activation Handshake
 
 The Debug Module registers are normally accessed through Bank 0, but activation requires Bank 1:
 
@@ -599,11 +599,11 @@ sleep_ms(50);
 
 The expected status response is `0x04010001`.
 
-## VII. RISC-V DEBUG MODULE INTERFACE
+## 7. RISC-V DEBUG MODULE INTERFACE
 
 The RISC-V Debug Module implements the RISC-V External Debug Support specification v0.13. Debug Module registers are memory-mapped at base address 0x40 (register addresses are byte offsets × 4).
 
-### VII.A Debug Module Registers
+### 7.A Debug Module Registers
 
 Key registers (`rp2350.c:17-29`):
 
@@ -620,7 +620,7 @@ Key registers (`rp2350.c:17-29`):
 #define DM_SBDATA0     (0x3C * 4)  // SBA Data
 ```
 
-### VII.B Hart Control via DMCONTROL
+### 7.B Hart Control via DMCONTROL
 
 Hart (hardware thread) execution is controlled through DMCONTROL register fields:
 
@@ -646,7 +646,7 @@ for (int i = 0; i < 10; i++) {
 }
 ```
 
-### VII.C Abstract Commands for Register Access
+### 7.C Abstract Commands for Register Access
 
 Abstract commands provide a high-level interface to hart state without halting. The COMMAND register format for GPR access:
 
@@ -670,11 +670,11 @@ wait_abstract_command(target);  // Poll ABSTRACTCS.busy
 result = dap_read_mem32(target, DM_DATA0);
 ```
 
-### VII.D Program Buffer Execution Model
+### 7.D Program Buffer Execution Model
 
 The Program Buffer (PROGBUF) is a 16-entry instruction memory within the Debug Module that enables execution of arbitrary RISC-V code in the debug context. Understanding its operation requires examining the execution model, register preservation semantics, and synchronization mechanisms.
 
-#### VI.D.1 The Dual-Context Execution Model
+#### 7.D.1 The Dual-Context Execution Model
 
 A RISC-V hart operates in one of two contexts:
 
@@ -688,7 +688,7 @@ A RISC-V hart operates in one of two contexts:
 
 The Debug Module provides a "scratch pad" where debugger-supplied instructions execute with full access to hart state, but without disturbing that state beyond explicit modifications.
 
-#### VI.D.2 PROGBUF Entry Layout
+#### 7.D.2 PROGBUF Entry Layout
 
 RP2350's Debug Module provides 2 program buffer entries (PROGBUF0 and PROGBUF1), though the specification allows up to 16. Each entry holds one 32-bit RISC-V instruction:
 
@@ -699,7 +699,7 @@ RP2350's Debug Module provides 2 program buffer entries (PROGBUF0 and PROGBUF1),
 
 The execution model assumes the final instruction is `ebreak` (0x00100073), which returns control to the Debug Module and makes the hart available for further debug operations.
 
-#### VI.D.3 The Abstract Command Postexec Mechanism
+#### 7.D.3 The Abstract Command Postexec Mechanism
 
 Abstract commands can trigger PROGBUF execution through the `postexec` bit (bit 18 of the COMMAND register). This creates a transactional execution model:
 
@@ -719,7 +719,7 @@ Abstract commands can trigger PROGBUF execution through the `postexec` bit (bit 
 
 This mechanism eliminates race conditions: the data transfer and program execution form an atomic operation from the debugger's perspective.
 
-#### VI.D.4 Case Study: Reading Debug CSR (DPC)
+#### 7.D.4 Case Study: Reading Debug CSR (DPC)
 
 The Debug Program Counter (DPC, CSR 0x7b1) cannot be accessed via abstract commands—it exists only in debug context and abstract commands target normal context registers. Reading DPC requires PROGBUF execution (`rp2350.c:804-833`):
 
@@ -772,7 +772,7 @@ rp2350_write_reg(target, hart_id, 8, saved_s0.value);  // Restore s0
 
 This five-phase sequence is invisible to the hart's normal execution: when resumed, all registers appear unchanged.
 
-#### VI.D.5 Writing Debug CSRs: The Inverse Operation
+#### 7.D.5 Writing Debug CSRs: The Inverse Operation
 
 Writing DPC uses the inverse data flow (`rp2350.c:879-909`):
 
@@ -802,7 +802,7 @@ The instruction `csrw dpc, s0` (CSR Write) has encoding 0x7b141073:
 
 **funct3=0x1 (CSRRW)**: CSR Read and Write. The old CSR value is discarded (rd=x0), and s0's value is written to DPC.
 
-#### VI.D.6 PROGBUF Execution Constraints
+#### 7.D.6 PROGBUF Execution Constraints
 
 The PROGBUF execution environment imposes several constraints:
 
@@ -818,11 +818,11 @@ The PROGBUF execution environment imposes several constraints:
 
 This execution model provides a "remote procedure call" mechanism where the host supplies short instruction sequences that execute atomically on the hart, providing a window into debug-only architectural state.
 
-## VII. SYSTEM BUS ACCESS: NON-INTRUSIVE MEMORY OPERATIONS
+## 8. SYSTEM BUS ACCESS: NON-INTRUSIVE MEMORY OPERATIONS
 
 System Bus Access (SBA) represents a fundamental departure from the traditional halt-based debugging model. Where classical debugging requires stopping the hart, transferring data through GPRs, and resuming, SBA provides a "back door" to the memory subsystem that operates concurrently with hart execution.
 
-### VII.A The SBA Architecture
+### 8.A The SBA Architecture
 
 The Debug Module contains a bus master that can initiate memory transactions on the system bus independently of the harts. This master has the following characteristics:
 
@@ -839,7 +839,7 @@ The SBA interface consists of three memory-mapped registers in the Debug Module:
 #define DM_SBDATA0     (0x3C * 4)  // System Bus Data (32-bit)
 ```
 
-### VII.B SBCS: Control and Status Word
+### 8.B SBCS: Control and Status Word
 
 The SBCS register (offset 0x38) contains configuration and status fields defined in RISC-V Debug Spec v0.13.2, section 3.12.18:
 
@@ -856,7 +856,7 @@ The SBCS register (offset 0x38) contains configuration and status fields defined
 11:5  sbasize          (read-only)  Address width in bits (32 for RP2350)
 ```
 
-### VII.C SBA Initialization: Capability Discovery
+### 8.C SBA Initialization: Capability Discovery
 
 The SBA subsystem initialization (`rp2350.c:958-992`) follows a capability discovery pattern:
 
@@ -886,7 +886,7 @@ dap_write_mem32(target, DM_SBCS, sbcs);
 
 The `sbreadonaddr` flag is critical: it converts the address write into an atomic read-trigger operation.
 
-### VII.D The Auto-Read Mechanism
+### 8.D The Auto-Read Mechanism
 
 Without `sbreadonaddr`, a memory read requires three transactions:
 
@@ -916,7 +916,7 @@ IDLE → [SBADDRESS0 written] → BUSY → [bus read completes] → DATA_READY
                            [bus timeout] → SBERROR=1
 ```
 
-### VII.E SBA Write Transactions
+### 8.E SBA Write Transactions
 
 Memory writes use SBDATA0 as the trigger register:
 
@@ -927,7 +927,7 @@ dap_write_mem32(target, DM_SBDATA0, value);     // Write triggers bus write
 
 The write to SBDATA0 initiates the system bus write transaction. The debugger should poll SBCS.sbbusyerror to detect completion (though in practice, pipelined writes are often used).
 
-### VII.F Cache Coherency: The Fundamental Limitation
+### 8.F Cache Coherency: The Fundamental Limitation
 
 SBA's most significant limitation is its lack of cache coherency guarantees. Consider this scenario:
 
@@ -941,7 +941,7 @@ The Debug Module's bus master accesses main memory, but the hart's cached copy m
 
 > "The System Bus Access block is not required to be cache coherent with the hart's view of memory."
 
-#### VII.F.1 Coherency Implications
+#### 8.F.1 Coherency Implications
 
 1. **Stale Reads**: SBA reads may return old values if the hart has written to cache but not flushed to memory.
 
@@ -951,7 +951,7 @@ The Debug Module's bus master accesses main memory, but the hart's cached copy m
 
 4. **Architecture Dependency**: Cache behavior depends on RP2350's Hazard3 cache implementation.
 
-#### VII.F.2 When SBA is Safe
+#### 8.F.2 When SBA is Safe
 
 SBA is coherent in these cases:
 
@@ -962,7 +962,7 @@ SBA is coherent in these cases:
 
 Our test suite validates SBA while the hart is running (`test_mem.c:291-347`) by using memory regions known to be uncached.
 
-### VII.G SBA Error Handling
+### 8.G SBA Error Handling
 
 The SBCS.sberror field reports transaction failures:
 
@@ -977,7 +977,7 @@ The SBCS.sberror field reports transaction failures:
 
 Errors are sticky and must be explicitly cleared by writing 1 to SBCS.sberror (W1C = Write-1-to-Clear).
 
-### VII.H Performance Characteristics
+### 8.H Performance Characteristics
 
 SBA performance depends on:
 
@@ -994,11 +994,11 @@ Compare to halt-based access:
 
 SBA provides approximately 5× speedup for bulk operations, with the added benefit of not disrupting real-time execution.
 
-## VIII. STATE MANAGEMENT AND CACHING
+## 9. STATE MANAGEMENT AND CACHING
 
 The library maintains comprehensive state tracking to avoid redundant SWD transactions:
 
-### VIII.A Connection State
+### 9.A Connection State
 
 ```c
 typedef struct {
@@ -1009,7 +1009,7 @@ typedef struct {
 } swd_target_t;
 ```
 
-### VIII.B DAP State Caching
+### 9.B DAP State Caching
 
 ```c
 typedef struct {
@@ -1022,7 +1022,7 @@ typedef struct {
 } dap_state_t;
 ```
 
-### VIII.C Per-Hart State Tracking
+### 9.C Per-Hart State Tracking
 
 RP2350 contains two RISC-V harts (hardware threads) that execute independently. The library maintains per-hart state to avoid redundant operations and enable concurrent debugging:
 
@@ -1056,7 +1056,7 @@ typedef struct {
 } rp2350_state_t;
 ```
 
-#### VIII.C.1 Halt State Tracking
+#### 9.C.1 Halt State Tracking
 
 The `halt_state_known` flag implements a three-state model:
 
@@ -1089,7 +1089,7 @@ This prevents expensive DMSTATUS polls when the state is known. State transition
                └─────────┘
 ```
 
-#### VIII.C.2 Register Caching
+#### 9.C.2 Register Caching
 
 When `cache_enabled=true`, the library caches register values after reads. This optimization benefits:
 
@@ -1104,11 +1104,11 @@ Cache invalidation occurs on:
 
 The cache is per-hart, allowing concurrent debugging of both harts without interference.
 
-## IX. RESOURCE MANAGEMENT
+## 10. RESOURCE MANAGEMENT
 
 PIO resources are scarce: RP2040/RP2350 provide 2 PIO blocks with 4 state machines each. The library implements a global resource tracker for multi-target support.
 
-### IX.A Global Resource Tracking
+### 10.A Global Resource Tracking
 
 ```c
 typedef struct {
@@ -1120,7 +1120,7 @@ typedef struct {
 extern resource_tracker_t g_resources;
 ```
 
-### IX.B Automatic Allocation
+### 10.B Automatic Allocation
 
 When `SWD_PIO_AUTO` or `SWD_SM_AUTO` is specified in configuration, the library scans for free resources (`swd.c:105-125`):
 
@@ -1139,11 +1139,11 @@ swd_error_t allocate_pio_sm(PIO *pio, uint *sm) {
 
 Up to 8 simultaneous target connections are supported (limited by hardware resources).
 
-## X. ERROR HANDLING AND RECOVERY
+## 11. ERROR HANDLING AND RECOVERY
 
 The library provides comprehensive error reporting through enumerated error codes and detailed message strings.
 
-### X.A Error Code Taxonomy
+### 11.A Error Code Taxonomy
 
 ```c
 typedef enum {
@@ -1160,7 +1160,7 @@ typedef enum {
 } swd_error_t;
 ```
 
-### X.B Error Detail Buffer
+### 11.B Error Detail Buffer
 
 Each target maintains a 128-byte error detail buffer for formatted diagnostic messages (`swd.c:67-84`):
 
@@ -1176,7 +1176,7 @@ void swd_set_error(swd_target_t *target, swd_error_t error,
 }
 ```
 
-### X.C ACK Response Mapping
+### 11.C ACK Response Mapping
 
 SWD protocol ACK responses are mapped to error codes (`swd.c:91-99`):
 
@@ -1191,7 +1191,7 @@ swd_error_t swd_ack_to_error(uint8_t ack) {
 }
 ```
 
-### X.D Retry Mechanism
+### 11.D Retry Mechanism
 
 WAIT responses trigger automatic retry with backoff (`swd_protocol.c:197-208`):
 
@@ -1205,9 +1205,9 @@ for (uint retry = 0; retry < target->dap.retry_count; retry++) {
 
 Default retry count is 5, configurable via `swd_config_t`.
 
-## XI. API USAGE
+## 12. API USAGE
 
-### XI.A Target Creation and Connection
+### 12.A Target Creation and Connection
 
 ```c
 swd_config_t config = swd_config_default();
@@ -1221,7 +1221,7 @@ swd_connect(target);
 rp2350_init(target);
 ```
 
-### XI.B Hart Control
+### 12.B Hart Control
 
 ```c
 // Halt hart 0
@@ -1247,7 +1247,7 @@ rp2350_resume(target, 0);
 rp2350_reset(target, 0, true);  // Reset and halt
 ```
 
-### XI.C Memory Operations
+### 12.C Memory Operations
 
 ```c
 // Read memory (non-intrusive via SBA)
@@ -1261,7 +1261,7 @@ uint32_t buffer[256];
 rp2350_read_mem_block(target, 0x20000000, buffer, 256);
 ```
 
-### XI.D Code Execution
+### 12.D Code Execution
 
 ```c
 const uint32_t program[] = {
@@ -1275,7 +1275,7 @@ const uint32_t program[] = {
 rp2350_execute_code(target, 0, 0x20000000, program, 5);
 ```
 
-### XI.E Instruction Tracing
+### 12.E Instruction Tracing
 
 ```c
 // Trace callback receives each executed instruction
@@ -1296,7 +1296,7 @@ int count = rp2350_trace(target, 0, 100, trace_callback, NULL, true);
 printf("Traced %d instructions\n", count);
 ```
 
-### XI.F Dual-Hart Operations
+### 12.F Dual-Hart Operations
 
 ```c
 // Operate on both harts independently
@@ -1317,16 +1317,16 @@ rp2350_resume(target, 0);
 rp2350_trace(target, 1, 50, trace_callback, NULL, false);
 ```
 
-## XII. BUILDING AND INTEGRATION
+## 13. BUILDING AND INTEGRATION
 
-### XII.A CMake Integration
+### 13.A CMake Integration
 
 ```cmake
 add_subdirectory(lib/pico2-swd-riscv)
 target_link_libraries(your_application pico2_swd_riscv)
 ```
 
-### XII.B Debug Level Configuration
+### 13.B Debug Level Configuration
 
 Set compile-time debug verbosity:
 
@@ -1336,7 +1336,7 @@ target_compile_definitions(your_application PRIVATE PICO2_SWD_DEBUG_LEVEL=3)
 
 Levels: 0 (none), 1 (warnings), 2 (info), 3 (debug).
 
-## XIII. REFERENCES
+## 14. REFERENCES
 
 - ARM Debug Interface Architecture Specification v5.2
 - ARM CoreSight SWD-DP Technical Reference Manual
@@ -1345,11 +1345,11 @@ Levels: 0 (none), 1 (warnings), 2 (info), 3 (debug).
 - ADIv5.2 Supplement for Multi-drop SWD
 - IEEE 1149.1-2001 (JTAG)
 
-## XIV. RISC-V SINGLE-STEP EXECUTION
+## 15. RISC-V SINGLE-STEP EXECUTION
 
 Single-step execution enables instruction-level debugging by executing exactly one instruction before re-entering debug mode. This is implemented via the DCSR.step bit (Debug Control and Status Register, bit 2).
 
-### XIV.A The Step Bit Mechanism
+### 15.A The Step Bit Mechanism
 
 When DCSR.step=1, the hart executes one instruction after `resumereq`, then immediately re-halts:
 
@@ -1364,7 +1364,7 @@ Implementation (`rp2350.c:431-504`):
 swd_result_t dcsr_result = read_dcsr(target, hart_id);
 ```
 
-DCSR must be read via PROGBUF (see Section VI.D) because it's a debug-only CSR.
+DCSR must be read via PROGBUF (see Section 7.D) because it's a debug-only CSR.
 
 **Phase 2: Set step bit**
 ```c
@@ -1395,7 +1395,7 @@ write_dcsr(target, hart_id, dcsr_result.value);  // Restore original DCSR
 
 This ensures subsequent `rp2350_resume()` calls don't single-step.
 
-### XIV.B Step Timing Considerations
+### 15.B Step Timing Considerations
 
 Single-step execution is significantly slower than free-running:
 - Normal execution: ~1 instruction per clock cycle
@@ -1405,13 +1405,13 @@ For 1000 instructions:
 - Normal: ~10µs at 100 MHz
 - Single-step: ~5 seconds
 
-Use instruction tracing (see Section XV) for performance-critical analysis.
+Use instruction tracing (see Section 15) for performance-critical analysis.
 
-## XV. INSTRUCTION TRACING VIA ITERATED SINGLE-STEPPING
+## 16. INSTRUCTION TRACING VIA ITERATED SINGLE-STEPPING
 
 The library implements software instruction tracing by repeatedly single-stepping and recording each instruction. This provides a "time-travel" debugging capability at the cost of execution speed.
 
-### XV.A The Trace Callback Model
+### 16.A The Trace Callback Model
 
 Tracing uses a callback function to process each instruction (`rp2350.c:1262-1337`):
 
@@ -1427,7 +1427,7 @@ typedef bool (*trace_callback_t)(const trace_record_t *record, void *user_data);
 
 The callback returns `true` to continue or `false` to stop.
 
-### XV.B Trace Implementation
+### 16.B Trace Implementation
 
 ```c
 int rp2350_trace(swd_target_t *target, uint8_t hart_id,
@@ -1445,7 +1445,7 @@ For each instruction:
 5. **Single-step**: Execute one instruction
 6. **Repeat** until `max_instructions` or callback returns false
 
-### XV.C Trace Use Cases
+### 16.C Trace Use Cases
 
 **Loop Detection**:
 ```c
@@ -1475,18 +1475,18 @@ bool capture_state(const trace_record_t *record, void *user_data) {
 rp2350_trace(target, 0, 100, capture_state, NULL, true);
 ```
 
-### XV.D Trace Limitations
+### 16.D Trace Limitations
 
 1. **Speed**: ~5ms per instruction (200 instructions/second)
 2. **Interrupt Masking**: Tracing should occur with interrupts disabled (clear mstatus.MIE)
 3. **Memory Consistency**: Instructions are fetched via SBA; ensure I-cache coherency
 4. **No Hardware Triggers**: Trace starts immediately; no "trace until condition"
 
-## XVI. HART RESET OPERATIONS
+## 17. HART RESET OPERATIONS
 
 Hart reset (`rp2350_reset`) implements a controlled reset sequence via DMCONTROL.ndmreset (non-debug module reset, bit 1).
 
-### XVI.A Reset Sequence
+### 17.A Reset Sequence
 
 ```c
 swd_error_t rp2350_reset(swd_target_t *target, uint8_t hart_id,
@@ -1509,7 +1509,7 @@ sleep_ms(50);  // Wait for reset completion
 
 If `halt_on_reset=true`, the DMCONTROL.haltreq bit remains set, causing the hart to enter debug mode immediately after reset, with PC set to the reset vector.
 
-### XVI.B Reset vs Power-On
+### 17.B Reset vs Power-On
 
 This reset is equivalent to a power-on reset for the hart:
 - PC → reset vector (typically 0x00000000 for RP2350 RISC-V cores)
@@ -1519,11 +1519,11 @@ This reset is equivalent to a power-on reset for the hart:
 
 Unlike a full chip reset, peripherals and other harts are unaffected.
 
-## XVII. DUAL-HART ARCHITECTURE
+## 18. DUAL-HART ARCHITECTURE
 
 RP2350's two RISC-V harts (Hazard3 cores) are symmetric and independently controllable. The library provides full per-hart state tracking and concurrent operation.
 
-### XVII.A Hart Selection via DMCONTROL
+### 18.A Hart Selection via DMCONTROL
 
 Each Debug Module operation targets a specific hart via DMCONTROL.hartsel[9:0]:
 
@@ -1541,7 +1541,7 @@ static inline uint32_t make_dmcontrol(uint8_t hart_id, bool haltreq,
 
 Before any hart-specific operation (halt, resume, register read), the library writes DMCONTROL with the correct `hart_id`, switching the Debug Module's attention to that hart.
 
-### XVII.B Independent Hart Control
+### 18.B Independent Hart Control
 
 The test suite validates that harts operate independently:
 
@@ -1557,7 +1557,7 @@ rp2350_read_all_regs(target, 0, h0_regs);
 
 This enables debugging one hart while the other maintains real-time operation.
 
-### XVII.C Register Isolation
+### 18.C Register Isolation
 
 Each hart maintains independent register state. Writing x5 on hart 0 does not affect x5 on hart 1. This is validated by `test_dual_hart.c:69-115`:
 
@@ -1569,7 +1569,7 @@ assert(rp2350_read_reg(target, 0, 5).value == 0xAAAAAAAA);
 assert(rp2350_read_reg(target, 1, 5).value == 0x55555555);
 ```
 
-### XVII.D Shared Memory, Independent Caches
+### 18.D Shared Memory, Independent Caches
 
 Both harts share the same physical memory space but maintain independent caches. This creates coherency considerations:
 
@@ -1579,32 +1579,32 @@ Both harts share the same physical memory space but maintain independent caches.
 
 The test suite exercises memory access while both harts run concurrently (`test_mem.c:291-347`).
 
-## XVIII. CURRENT LIMITATIONS
+## 19. CURRENT LIMITATIONS
 
 This implementation does not currently support:
 
-### XVIII.A Hardware Breakpoints (Trigger Module)
+### 19.A Hardware Breakpoints (Trigger Module)
 
 RISC-V Debug Specification defines a Trigger Module for hardware breakpoints. Implementation was removed due to complexity. Workaround: Use single-step + PC comparison in software.
 
-### XVIII.B Multi-Drop SWD
+### 19.B Multi-Drop SWD
 
 The SWD protocol supports multiple targets on one bus via unique addresses. This library assumes a single target. Physical wiring for multi-target is possible but requires additional multiplexing logic.
 
-### XVIII.C Compressed Instruction (RVC) Extension
+### 19.C Compressed Instruction (RVC) Extension
 
 RP2350's Hazard3 cores support the C extension (16-bit compressed instructions). The library:
 - Correctly reads compressed instructions during tracing
 - Does NOT decode compressed instruction mnemonics
 - Assumes 4-byte alignment for code upload
 
-### XVIII.D Performance Profiling
+### 19.D Performance Profiling
 
 No cycle-accurate performance counters are exposed. Implementing this requires:
 1. Access to mcycle/minstret CSRs
 2. Periodic sampling without halting (not possible with current SBA coherency)
 
-### XVIII.E Flash Programming
+### 19.E Flash Programming
 
 No routines for RP2350 flash programming. This requires:
 1. Loading flash programmer stub to SRAM
@@ -1613,7 +1613,7 @@ No routines for RP2350 flash programming. This requires:
 
 The architecture supports this; implementation is left to applications.
 
-## XV. LICENSE
+## 20. LICENSE
 
 Copyright (c) 2025
 
@@ -1623,7 +1623,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## XYZ VIBE
+## 21. XYZ VIBE
 
 About 70% of the code is vibe coded; The readme is almost completely generated. I spent nights with the oscilloscope and the docs and made a working prototype that was able ti do sba/read/write regs and do abstract commands and progbuf, the rest was done with claude code.
 
