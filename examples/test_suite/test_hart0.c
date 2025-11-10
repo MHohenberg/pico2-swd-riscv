@@ -1,0 +1,508 @@
+/**
+ * @file test_hart0.c
+ * @brief Hart 0 operations and stress tests
+ *
+ * Copyright (c) 2025
+ * SPDX-License-Identifier: MIT
+ */
+
+#include "test_framework.h"
+#include "pico2-swd-riscv/rp2350.h"
+#include <stdio.h>
+#include "pico/stdlib.h"
+
+//==============================================================================
+// Test 3: Halt Hart 0
+//==============================================================================
+
+static bool test_halt_hart0(swd_target_t *target) {
+    printf("# Halting hart 0...\n");
+
+    swd_error_t err = rp2350_halt(target, 0);
+    if (err != SWD_OK && err != SWD_ERROR_ALREADY_HALTED) {
+        printf("# Failed to halt: %s\n", swd_error_string(err));
+        test_send_response(RESP_FAIL, swd_error_string(err));
+        return false;
+    }
+
+    printf("# Hart 0 halted\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 4: Read PC
+//==============================================================================
+
+static bool test_read_pc_hart0(swd_target_t *target) {
+    printf("# Reading PC from hart 0...\n");
+
+    rp2350_halt(target, 0);  // Ensure halted
+
+    swd_result_t pc = rp2350_read_pc(target, 0);
+    if (pc.error != SWD_OK) {
+        printf("# Failed to read PC: %s\n", swd_error_string(pc.error));
+        test_send_response(RESP_FAIL, swd_error_string(pc.error));
+        return false;
+    }
+
+    printf("# PC = 0x%08lx\n", (unsigned long)pc.value);
+    test_send_value(pc.value);
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 5: Read All GPRs
+//==============================================================================
+
+static bool test_read_all_gprs(swd_target_t *target) {
+    printf("# Reading all 32 GPRs from hart 0...\n");
+
+    rp2350_halt(target, 0);
+
+    for (uint8_t i = 0; i < 32; i++) {
+        swd_result_t reg = rp2350_read_reg(target, 0, i);
+        if (reg.error != SWD_OK) {
+            printf("# Failed to read x%u: %s\n", i, swd_error_string(reg.error));
+            test_send_response(RESP_FAIL, "Failed to read register");
+            return false;
+        }
+        printf("# x%u = 0x%08lx\n", i, (unsigned long)reg.value);
+    }
+
+    printf("# All GPRs read successfully\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 6: Write and Verify GPRs
+//==============================================================================
+
+static bool test_write_verify_gprs(swd_target_t *target) {
+    printf("# Writing and verifying x1-x31...\n");
+
+    rp2350_halt(target, 0);
+
+    for (uint8_t i = 1; i < 32; i++) {
+        uint32_t test_value = 0xA5A50000 | i;
+
+        swd_error_t err = rp2350_write_reg(target, 0, i, test_value);
+        if (err != SWD_OK) {
+            printf("# Failed to write x%u: %s\n", i, swd_error_string(err));
+            test_send_response(RESP_FAIL, "Failed to write register");
+            return false;
+        }
+
+        swd_result_t readback = rp2350_read_reg(target, 0, i);
+        if (readback.error != SWD_OK || readback.value != test_value) {
+            printf("# Verification failed for x%u: wrote 0x%08lx, read 0x%08lx\n",
+                   i, (unsigned long)test_value, (unsigned long)readback.value);
+            test_send_response(RESP_FAIL, "Register verification failed");
+            return false;
+        }
+    }
+
+    printf("# All registers written and verified\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 7: Write and Verify PC
+//==============================================================================
+
+static bool test_write_verify_pc(swd_target_t *target) {
+    printf("# Writing and verifying PC...\n");
+
+    rp2350_halt(target, 0);
+
+    uint32_t test_pc = 0x20000100;
+    swd_error_t err = rp2350_write_pc(target, 0, test_pc);
+    if (err != SWD_OK) {
+        printf("# Failed to write PC: %s\n", swd_error_string(err));
+        test_send_response(RESP_FAIL, "Failed to write PC");
+        return false;
+    }
+
+    swd_result_t readback = rp2350_read_pc(target, 0);
+    if (readback.error != SWD_OK || readback.value != test_pc) {
+        printf("# PC verification failed: wrote 0x%08lx, read 0x%08lx\n",
+               (unsigned long)test_pc, (unsigned long)readback.value);
+        test_send_response(RESP_FAIL, "PC verification failed");
+        return false;
+    }
+
+    printf("# PC written and verified: 0x%08lx\n", (unsigned long)test_pc);
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 8: Read Memory (ROM)
+//==============================================================================
+
+static bool test_read_rom(swd_target_t *target) {
+    printf("# Reading ROM at 0x00000000...\n");
+
+    swd_result_t result = rp2350_read_mem32(target, 0x00000000);
+    if (result.error != SWD_OK) {
+        printf("# Failed to read ROM: %s\n", swd_error_string(result.error));
+        test_send_response(RESP_FAIL, "Failed to read ROM");
+        return false;
+    }
+
+    printf("# ROM[0x00000000] = 0x%08lx\n", (unsigned long)result.value);
+    test_send_value(result.value);
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 9: Write and Verify Memory (SRAM)
+//==============================================================================
+
+static bool test_write_verify_sram(swd_target_t *target) {
+    printf("# Writing and verifying SRAM...\n");
+
+    uint32_t test_addr = 0x20000000;
+    uint32_t test_data = 0xDEADBEEF;
+
+    swd_error_t err = rp2350_write_mem32(target, test_addr, test_data);
+    if (err != SWD_OK) {
+        printf("# Failed to write SRAM: %s\n", swd_error_string(err));
+        test_send_response(RESP_FAIL, "Failed to write SRAM");
+        return false;
+    }
+
+    swd_result_t readback = rp2350_read_mem32(target, test_addr);
+    if (readback.error != SWD_OK || readback.value != test_data) {
+        printf("# SRAM verification failed: wrote 0x%08lx, read 0x%08lx\n",
+               (unsigned long)test_data, (unsigned long)readback.value);
+        test_send_response(RESP_FAIL, "SRAM verification failed");
+        return false;
+    }
+
+    printf("# SRAM written and verified\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 10: Resume Hart 0
+//==============================================================================
+
+static bool test_resume_hart0(swd_target_t *target) {
+    printf("# Resuming hart 0...\n");
+
+    rp2350_halt(target, 0);  // Halt first
+
+    swd_error_t err = rp2350_resume(target, 0);
+    if (err != SWD_OK) {
+        printf("# Failed to resume: %s\n", swd_error_string(err));
+        test_send_response(RESP_FAIL, swd_error_string(err));
+        return false;
+    }
+
+    printf("# Hart 0 resumed\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 11: Halt/Resume Stress Test
+//==============================================================================
+
+static bool test_halt_resume_stress(swd_target_t *target) {
+    printf("# Running halt/resume stress test (100 cycles)...\n");
+
+    for (uint i = 0; i < 100; i++) {
+        if (i % 10 == 0) printf("# Cycle %u/100\n", i);
+
+        swd_error_t err = rp2350_halt(target, 0);
+        if (err != SWD_OK && err != SWD_ERROR_ALREADY_HALTED) {
+            printf("# Halt failed at cycle %u: %s\n", i, swd_error_string(err));
+            test_send_response(RESP_FAIL, "Halt failed during stress test");
+            return false;
+        }
+
+        err = rp2350_resume(target, 0);
+        if (err != SWD_OK) {
+            printf("# Resume failed at cycle %u: %s\n", i, swd_error_string(err));
+            test_send_response(RESP_FAIL, "Resume failed during stress test");
+            return false;
+        }
+    }
+
+    printf("# Halt/resume stress test completed\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 12: Register Stress Test
+//==============================================================================
+
+static bool test_register_stress(swd_target_t *target) {
+    printf("# Running register stress test (1000 operations)...\n");
+
+    rp2350_halt(target, 0);
+
+    uint32_t patterns[] = {
+        0x00000000, 0xFFFFFFFF, 0xAAAAAAAA, 0x55555555,
+        0x12345678, 0x87654321, 0xDEADBEEF, 0xCAFEBABE
+    };
+
+    for (uint iter = 0; iter < 125; iter++) {
+        if (iter % 25 == 0) printf("# Iteration %u/125\n", iter);
+
+        for (uint pat = 0; pat < 8; pat++) {
+            for (uint8_t reg = 5; reg <= 12; reg++) {
+                uint32_t value = patterns[pat] ^ (reg << 24);
+
+                swd_error_t err = rp2350_write_reg(target, 0, reg, value);
+                if (err != SWD_OK) {
+                    printf("# Write failed at iter %u, reg x%u\n", iter, reg);
+                    test_send_response(RESP_FAIL, "Register write failed");
+                    return false;
+                }
+
+                swd_result_t readback = rp2350_read_reg(target, 0, reg);
+                if (readback.error != SWD_OK || readback.value != value) {
+                    printf("# Readback failed at iter %u, reg x%u\n", iter, reg);
+                    test_send_response(RESP_FAIL, "Register readback failed");
+                    return false;
+                }
+            }
+        }
+    }
+
+    printf("# Register stress test completed (1000 operations)\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 13: Memory Stress Test
+//==============================================================================
+
+static bool test_memory_stress(swd_target_t *target) {
+    printf("# Running memory stress test...\n");
+
+    uint32_t base_addr = 0x20001000;
+
+    // Walking 1s pattern
+    printf("# Testing walking 1s pattern...\n");
+    for (uint i = 0; i < 32; i++) {
+        uint32_t pattern = 1u << i;
+        uint32_t addr = base_addr + (i * 4);
+
+        swd_error_t err = rp2350_write_mem32(target, addr, pattern);
+        if (err != SWD_OK) {
+            printf("# Write failed at walking 1s test, bit %u\n", i);
+            test_send_response(RESP_FAIL, "Memory write failed");
+            return false;
+        }
+    }
+
+    for (uint i = 0; i < 32; i++) {
+        uint32_t expected = 1u << i;
+        uint32_t addr = base_addr + (i * 4);
+
+        swd_result_t result = rp2350_read_mem32(target, addr);
+        if (result.error != SWD_OK || result.value != expected) {
+            printf("# Verify failed at walking 1s test, bit %u\n", i);
+            test_send_response(RESP_FAIL, "Memory verify failed");
+            return false;
+        }
+    }
+
+    // Block write/read test (256 words)
+    printf("# Testing block operations (256 words)...\n");
+    for (uint i = 0; i < 256; i++) {
+        uint32_t value = 0xA5000000 | i;
+        uint32_t addr = base_addr + (i * 4);
+
+        swd_error_t err = rp2350_write_mem32(target, addr, value);
+        if (err != SWD_OK) {
+            printf("# Block write failed at word %u\n", i);
+            test_send_response(RESP_FAIL, "Block write failed");
+            return false;
+        }
+    }
+
+    for (uint i = 0; i < 256; i++) {
+        uint32_t expected = 0xA5000000 | i;
+        uint32_t addr = base_addr + (i * 4);
+
+        swd_result_t result = rp2350_read_mem32(target, addr);
+        if (result.error != SWD_OK || result.value != expected) {
+            printf("# Block verify failed at word %u\n", i);
+            test_send_response(RESP_FAIL, "Block verify failed");
+            return false;
+        }
+    }
+
+    printf("# Memory stress test completed\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 14: Upload and Execute Small Program
+//==============================================================================
+
+static bool test_execute_small_program(swd_target_t *target) {
+    printf("# Testing program upload and execution...\n");
+
+    rp2350_halt(target, 0);
+
+    // Small program: li x5, 0x42; j 0
+    uint32_t program[] = {
+        0x04200293,  // li x5, 0x42 (addi x5, x0, 0x42)
+        0x0000006f,  // j 0 (infinite loop)
+    };
+
+    uint32_t program_addr = 0x20002000;
+
+    // Upload program
+    printf("# Uploading program to 0x%08lx...\n", (unsigned long)program_addr);
+    for (uint i = 0; i < sizeof(program)/sizeof(program[0]); i++) {
+        swd_error_t err = rp2350_write_mem32(target, program_addr + (i * 4), program[i]);
+        if (err != SWD_OK) {
+            printf("# Failed to upload instruction %u\n", i);
+            test_send_response(RESP_FAIL, "Program upload failed");
+            return false;
+        }
+    }
+
+    // Clear x5
+    rp2350_write_reg(target, 0, 5, 0x00000000);
+
+    // Set PC and execute
+    swd_error_t err = rp2350_write_pc(target, 0, program_addr);
+    if (err != SWD_OK) {
+        printf("# Failed to set PC\n");
+        test_send_response(RESP_FAIL, "Failed to set PC");
+        return false;
+    }
+
+    err = rp2350_resume(target, 0);
+    if (err != SWD_OK) {
+        printf("# Failed to resume\n");
+        test_send_response(RESP_FAIL, "Failed to resume");
+        return false;
+    }
+
+    sleep_ms(10);
+
+    err = rp2350_halt(target, 0);
+    if (err != SWD_OK) {
+        printf("# Failed to halt\n");
+        test_send_response(RESP_FAIL, "Failed to halt");
+        return false;
+    }
+
+    // Check x5
+    swd_result_t x5 = rp2350_read_reg(target, 0, 5);
+    if (x5.error != SWD_OK || x5.value != 0x00000042) {
+        printf("# Program verification failed: x5 = 0x%08lx (expected 0x00000042)\n",
+               (unsigned long)x5.value);
+        test_send_response(RESP_FAIL, "Program execution failed");
+        return false;
+    }
+
+    printf("# Program executed successfully\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 15: Instruction Tracing
+//==============================================================================
+
+static bool test_instruction_tracing(swd_target_t *target) {
+    printf("# Testing instruction tracing (10 steps)...\n");
+
+    rp2350_halt(target, 0);
+
+    // Read initial PC
+    swd_result_t initial_pc = rp2350_read_pc(target, 0);
+    if (initial_pc.error != SWD_OK) {
+        printf("# Failed to read initial PC\n");
+        test_send_response(RESP_FAIL, "Failed to read PC");
+        return false;
+    }
+
+    printf("# Starting PC: 0x%08lx\n", (unsigned long)initial_pc.value);
+
+    // Single-step 10 instructions
+    for (uint i = 0; i < 10; i++) {
+        swd_error_t err = rp2350_step(target, 0);
+        if (err != SWD_OK) {
+            printf("# Step %u failed: %s\n", i, swd_error_string(err));
+            test_send_response(RESP_FAIL, "Single-step failed");
+            return false;
+        }
+
+        swd_result_t pc = rp2350_read_pc(target, 0);
+        if (pc.error == SWD_OK) {
+            printf("# Step %u: PC = 0x%08lx\n", i + 1, (unsigned long)pc.value);
+        }
+    }
+
+    printf("# Instruction tracing completed\n");
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test 16: Hart Reset
+//==============================================================================
+
+static bool test_hart_reset(swd_target_t *target) {
+    printf("# Testing hart reset with halt...\n");
+
+    swd_error_t err = rp2350_reset(target, 0, true);
+    if (err != SWD_OK) {
+        printf("# Reset failed: %s\n", swd_error_string(err));
+        test_send_response(RESP_FAIL, "Reset failed");
+        return false;
+    }
+
+    // Verify PC is at reset vector
+    swd_result_t pc = rp2350_read_pc(target, 0);
+    if (pc.error != SWD_OK) {
+        printf("# Failed to read PC after reset\n");
+        test_send_response(RESP_FAIL, "Failed to read PC after reset");
+        return false;
+    }
+
+    printf("# Hart reset successful, PC = 0x%08lx\n", (unsigned long)pc.value);
+    test_send_response(RESP_PASS, NULL);
+    return true;
+}
+
+//==============================================================================
+// Test Suite Definition
+//==============================================================================
+
+test_case_t hart0_tests[] = {
+    { "TEST 3: Halt Hart 0", test_halt_hart0, false, false },
+    { "TEST 4: Read PC", test_read_pc_hart0, false, false },
+    { "TEST 5: Read All GPRs", test_read_all_gprs, false, false },
+    { "TEST 6: Write/Verify GPRs", test_write_verify_gprs, false, false },
+    { "TEST 7: Write/Verify PC", test_write_verify_pc, false, false },
+    { "TEST 8: Read ROM", test_read_rom, false, false },
+    { "TEST 9: Write/Verify SRAM", test_write_verify_sram, false, false },
+    { "TEST 10: Resume Hart 0", test_resume_hart0, false, false },
+    { "TEST 11: Halt/Resume Stress Test", test_halt_resume_stress, false, false },
+    { "TEST 12: Register Stress Test", test_register_stress, false, false },
+    { "TEST 13: Memory Stress Test", test_memory_stress, false, false },
+    { "TEST 14: Execute Small Program", test_execute_small_program, false, false },
+    { "TEST 15: Instruction Tracing", test_instruction_tracing, false, false },
+    { "TEST 16: Hart Reset", test_hart_reset, false, false },
+};
+
+const uint32_t hart0_test_count = sizeof(hart0_tests) / sizeof(hart0_tests[0]);
