@@ -20,8 +20,6 @@ The main issue is `taste`, when I write code I feel if its good or bad, as I am 
 
 __The tokens have no reason or purpose__, which makes reading code ridiculously difficult, as and each token can be complete nonsense. When reading human code the symbols have a purpose, someone thought "I will put this in a variable, later I will check its status.", so I pretend I am them, and think `why` would they have written this? Shortly after I understand, as they are human and I am human. But the AI symbols have no reason, and worse of all, they all look deceptively correct, so I have to think 10 times harder if it is wrong. With any human code (including your own) it is quite easy to gauge how much you can trust it, and it is quite consistent, with the AI code, one function can be much better than what you woudld've written, and the code 2 lines below can be cargo culted gunk that looks incredibly good, but is structurally wrong.
 
----
-
 In the end I would say I have gained good understanding of the wires, timings, and the lower level ap/dp mechanics, sba and progbuf, but I regret not writing the whole thing myself, even if it would've taken 10x the time.
 
 I fucking hate this.
