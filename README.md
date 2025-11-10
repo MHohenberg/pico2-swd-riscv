@@ -1341,7 +1341,7 @@ Levels: 0 (none), 1 (warnings), 2 (info), 3 (debug).
 - ARM Debug Interface Architecture Specification v5.2
 - ARM CoreSight SWD-DP Technical Reference Manual
 - RISC-V External Debug Support version 0.13
-- RP2350 Datasheet, Chapter 4: Debug
+- RP2350 Datasheet, Chapter 3.5: Debug
 - ADIv5.2 Supplement for Multi-drop SWD
 - IEEE 1149.1-2001 (JTAG)
 
